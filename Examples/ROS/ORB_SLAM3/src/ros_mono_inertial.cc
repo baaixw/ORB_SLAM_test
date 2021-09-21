@@ -41,7 +41,7 @@
 #include <novatel_msgs/BESTPOS.h> // novatel_msgs/INSPVAX
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
-FILE* groundTruth  = fopen( "../ORB_SLAM3/result/groundTruthorb.csv", "w+");
+FILE* groundTruth  = fopen( "/home/wws/ORB_SLAM3/result/groundTruthorb.csv", "w+");
 
 using namespace std;
 
@@ -91,6 +91,8 @@ double seconds_;
 ros::Publisher pub_odometrySpan;
 tf2::Quaternion gt_q;
 double  time_now=0;
+
+double imu_time = -1;
 
 void span_bp_callback(const novatel_msgs::INSPVAXConstPtr& fix_msg)
 {
@@ -158,7 +160,7 @@ void span_bp_callback(const novatel_msgs::INSPVAXConstPtr& fix_msg)
   
 
     /* save the groundTruth using fprintf*/
-    fprintf(groundTruth, "%3.2f %6.8f %6.8f %6.8f %6.8f %6.8f %6.8f %6.8f\n", seconds_, enu1(0), enu1(1), enu1(2), gt_q[0], gt_q[1], gt_q[2], gt_q[3]);
+    fprintf(groundTruth, "%3.2f %6.8f %6.8f %6.8f %6.8f %6.8f %6.8f %6.8f\n", imu_time, enu1(0), enu1(1), enu1(2), gt_q[0], gt_q[1], gt_q[2], gt_q[3]);
     fflush(groundTruth);
 
 }
@@ -193,8 +195,8 @@ int main(int argc, char **argv)
   ros::Subscriber sub_imu = n.subscribe("/imu/data", 1000, &ImuGrabber::GrabImu, &imugb); 
   ros::Subscriber sub_img0 = n.subscribe("/camera/image_color", 100, &ImageGrabber::GrabImage,&igb);
 
-ros::Subscriber span_BP_sub =n.subscribe("/novatel_data/inspvax", 500, span_bp_callback);
-pub_odometrySpan = n.advertise<nav_msgs::Odometry>("odometryenu", 1000);
+  ros::Subscriber span_BP_sub =n.subscribe("/novatel_data/inspvax", 500, span_bp_callback);
+  pub_odometrySpan = n.advertise<nav_msgs::Odometry>("odometryenu", 1000);
 
   std::thread sync_thread(&ImageGrabber::SyncWithImu,&igb);
   ros::spin();
@@ -295,6 +297,7 @@ void ImuGrabber::GrabImu(const sensor_msgs::ImuConstPtr &imu_msg)
 {
   mBufMutex.lock();
   imuBuf.push(imu_msg);
+  imu_time = imu_msg->header.stamp.toSec();
   mBufMutex.unlock();
   return;
 }

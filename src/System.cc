@@ -33,6 +33,17 @@
 #include <boost/archive/xml_iarchive.hpp>
 #include <boost/archive/xml_oarchive.hpp>
 
+#include <Eigen/Dense>
+#include <eigen3/Eigen/Dense>
+#include <opencv2/core/eigen.hpp>
+
+#include <Eigen/Core>
+#include <Eigen/Dense>
+#include <Eigen/Geometry>
+
+
+using namespace Eigen;
+
 namespace ORB_SLAM3
 {
 
@@ -455,13 +466,85 @@ void System::SaveTrajectoryTUM(const string &filename)
 
         Trw = Trw*pKF->GetPose()*Two;
 
+        cv::Mat Tbc = cv::Mat::eye(4,4,CV_32F);
+        
+        Tbc.at<float>(0,0) = 9.9934608718980233e-01;
+        Tbc.at<float>(0,1) = -1.5715484428488590e-02;
+        Tbc.at<float>(0,2) = -3.2564114721728155e-02;
+        Tbc.at<float>(0,3) = -1.7434527332030676e-02;
+
+        Tbc.at<float>(1,0) = 3.2359037356803094e-02;
+        Tbc.at<float>(1,1) = -1.3131917124154624e-02;
+        Tbc.at<float>(1,2) = 9.9939003669937865e-01;
+        Tbc.at<float>(1,3) = 1.7171139776467173e-01;
+
+        Tbc.at<float>(2,0) = -1.6133527815482926e-02;
+        Tbc.at<float>(2,1) = -9.9979026615676858e-01;
+        Tbc.at<float>(2,2) = -1.2614792047622947e-02;
+        Tbc.at<float>(2,3) = -4.5251036141047592e-02;
+
+        Tbc.at<float>(3,0) = 0;
+        Tbc.at<float>(3,1) = 0;
+        Tbc.at<float>(3,2) = 0;
+        Tbc.at<float>(3,3) = 1;
+
+        cv::Mat rotX = cv::Mat::eye(4,4,CV_32F);
+        
+        rotX.at<float>(0,0) = 1;
+        rotX.at<float>(0,1) = 0;
+        rotX.at<float>(0,2) = 0;
+        rotX.at<float>(0,3) = 0;
+
+        rotX.at<float>(1,0) = 0;
+        rotX.at<float>(1,1) = 0;
+        rotX.at<float>(1,2) = -1;
+        rotX.at<float>(1,3) = 0;
+
+        rotX.at<float>(2,0) = 0;
+        rotX.at<float>(2,1) = 1;
+        rotX.at<float>(2,2) = 0;
+        rotX.at<float>(2,3) = 0;
+
+        rotX.at<float>(3,0) = 0;
+        rotX.at<float>(3,1) = 0;
+        rotX.at<float>(3,2) = 0;
+        rotX.at<float>(3,3) = 1;
+
         cv::Mat Tcw = (*lit)*Trw;
-        cv::Mat Rwc = Tcw.rowRange(0,3).colRange(0,3).t();
-        cv::Mat twc = -Rwc*Tcw.rowRange(0,3).col(3);
+        // Tcw = rotX * Tbc * Tcw;  
 
-        vector<float> q = Converter::toQuaternion(Rwc);
+        Eigen::Matrix<float,Eigen::Dynamic, Eigen::Dynamic> eigenExtric; 
+        cv::cv2eigen(Tbc, eigenExtric);
 
-        f << setprecision(6) << *lT << " " <<  setprecision(9) << twc.at<float>(0) << " " << twc.at<float>(1) << " " << twc.at<float>(2) << " " << q[0] << " " << q[1] << " " << q[2] << " " << q[3] << endl;
+        Eigen::Matrix<float,Eigen::Dynamic, Eigen::Dynamic> eigenTcw; 
+        cv::cv2eigen(Tcw, eigenTcw);
+
+        Eigen::MatrixXf eigenTbw;
+        eigenTbw.resize(4, 4);
+        eigenTbw = eigenExtric * eigenTcw;
+
+        Eigen::Matrix3f rotation_matrix;
+        Eigen::AngleAxisf rotation_vector(-M_PI/2, Eigen::Vector3f(1,0,0));
+        rotation_matrix = rotation_vector.toRotationMatrix();
+        Eigen::Matrix4f T_44;
+        T_44.setIdentity();
+        T_44.block< 3,3 >(0,0) = rotation_matrix;
+
+        Eigen::MatrixXf eigenTwb;
+        eigenTwb.resize(4, 4);
+        eigenTwb = eigenTbw.inverse(); 
+        eigenTwb = T_44 * eigenTwb;
+        // eigenTwb = eigenTwb * T_44;
+        Eigen::Quaternionf eigenq = Eigen::Quaternionf(eigenTwb.block< 3,3 >(0,0));
+        f << setprecision(6) << *lT << " " <<  setprecision(9) << eigenTwb(0, 3) << " " << eigenTwb(1, 3) << " " << eigenTwb(2, 3) << " " << eigenq.x() << " " << eigenq.y() << " " << eigenq.z() << " " << eigenq.w() << endl;
+
+
+        /* using openCV mat*/
+        // cv::Mat Rwc = Tcw.rowRange(0,3).colRange(0,3).t();
+        // cv::Mat twc = -Rwc*Tcw.rowRange(0,3).col(3);
+        // vector<float> q = Converter::toQuaternion(Rwc);
+        // f << setprecision(6) << *lT << " " <<  setprecision(9) << twc.at<float>(0) << " " << twc.at<float>(1) << " " << twc.at<float>(2) << " " << q[0] << " " << q[1] << " " << q[2] << " " << q[3] << endl;
+
     }
     f.close();
     // cout << endl << "trajectory saved!" << endl;
